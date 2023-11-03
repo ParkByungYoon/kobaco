@@ -1,17 +1,7 @@
 from sklearn.cluster import KMeans
-from sklearn.tree import DecisionTreeClassifier, _tree, export_graphviz, export_text
-from sklearn import tree
-import graphviz
-import pandas as pd
 import numpy as np
-import pickle
-import warnings   
-import os 
 import matplotlib.pyplot as plt
-import re
 from sklearn.metrics import recall_score, precision_score, f1_score
-
-warnings.filterwarnings(action='ignore')
 
 
 class DecisionTree:
