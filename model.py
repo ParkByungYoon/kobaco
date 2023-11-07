@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import recall_score, precision_score, f1_score
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
 
 
 class DecisionTree:
@@ -15,10 +16,12 @@ class DecisionTree:
         self.max_depth = None
         self.k = k
 
-        self.kmeans(k)
+        X = np.array(pivot_df.iloc[:,:])
+        Y = np.array(self.kmeans(k))
 
-        self.X = np.array(pivot_df.iloc[:,:])
-        self.Y = np.array(self.label)
+        self.x_train, self.x_valid, self.y_train, self.y_valid = train_test_split(X, Y, test_size=0.1, random_state=42)
+        self.X = self.x_train
+        self.Y = self.y_train
 
         self.feature_names = self.df.columns.tolist()[:]
         self.class_names = [str(i) for i in list(self.Y)]
@@ -28,17 +31,28 @@ class DecisionTree:
         kmeans = KMeans(n_clusters=k, random_state=42)
         embedding = self.embedding[self.df.index.values.tolist()].copy()
         kmeans.fit(embedding)
-        self.label = kmeans.predict(embedding)
+        return kmeans.predict(embedding)
     
 
     def kmeans_target(self, tgt_n): 
-        self.Y = (self.label==tgt_n).astype(int)
+        self.tgt_n = tgt_n
+        self.X = self.x_train
+        self.Y = (self.y_train==self.tgt_n).astype(int)
     
 
     def make_dt(self, ccp_alpha=0.0, max_depth=None, random_state = 42):
         model = DecisionTreeClassifier(ccp_alpha = ccp_alpha, max_depth = max_depth, random_state=random_state)
         model = model.fit(self.X, self.Y)
         return model
+    
+
+    def get_valid_score(self, model, scoring, average='macro'):
+        self.X = self.x_valid
+        if model.n_classes_ == 2:
+            self.Y = (self.y_valid==self.tgt_n).astype(int)
+        else:
+            self.Y = self.y_valid
+        return self.get_score(model, scoring, average)
 
 
     def get_score(self, model, scoring, average='macro'):
@@ -86,7 +100,7 @@ class DecisionTree:
                 plt.hlines(y=target_score, xmin = passed_depths[-1], xmax=passed_depths[0],colors='r')
                 plt.show()
 
-                self.max_depth_dt = model
+                self.max_depth_dt = self.make_dt(max_depth = passed_depths[-2])
                 return passed_depths[-2], score_list[-2]
                 
             i += 1
