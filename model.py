@@ -2,6 +2,7 @@ from sklearn.cluster import KMeans
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import recall_score, precision_score, f1_score
+from sklearn.tree import DecisionTreeClassifier
 
 
 class DecisionTree:
@@ -40,17 +41,19 @@ class DecisionTree:
         return model
 
 
-    def get_score(self, model, scoring):
+    def get_score(self, model, scoring, average='macro'):
         prediction = model.predict(self.X)
+        if model.n_classes_ == 2:   
+            average='binary'
         
-        if scoring == 'recall':
-            score = recall_score(self.Y, prediction)
-        elif scoring == 'precision':
-            score = precision_score(self.Y, prediction)
-        elif scoring == 'f1_score':
-            score = f1_score(self.Y, prediction, average='micro')
-        
-        return score
+        recall = recall_score(self.Y, prediction, average=average)
+        precision = precision_score(self.Y, prediction, average=average)
+        f1 = f1_score(self.Y, prediction, average=average)
+
+        if scoring == 'recall': return recall
+        elif scoring == 'precision': return precision
+        elif scoring == 'f1_score': return f1
+        else:   return recall, precision, f1
 
 
     def get_proper_depth(self, target_score, scoring='f1_score'):
@@ -88,3 +91,18 @@ class DecisionTree:
                 
             i += 1
         raise Exception('너무 작은 target f1')
+    
+
+    def get_all_depth(self, scoring='all'):
+        self.max_depth = self.make_dt().get_depth()
+    
+        score_list = []
+
+        for depth in range(1, self.max_depth):
+            if depth % 10 == 0:
+                print(f'testing depth {depth}...', end='\r')
+            model = self.make_dt(max_depth = depth)
+            score = self.get_score(model, scoring)
+            score_list.append(score)
+        
+        return score_list
