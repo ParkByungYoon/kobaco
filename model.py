@@ -2,24 +2,29 @@ from sklearn.cluster import KMeans
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import recall_score, precision_score, f1_score
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 
 
 class DecisionTree:
 
-    def __init__(self, pivot_df, embedding, k=15) -> None:
+    def __init__(self, pivot_df, embedding, validation=False, k=15) -> None:
         self.df = pivot_df
         self.embedding = embedding
 
         self.alpha = 0.0
         self.max_depth = None
         self.k = k
+        self.validation = validation
 
         X = np.array(pivot_df.iloc[:,:])
         Y = np.array(self.kmeans(k))
 
-        self.x_train, self.x_valid, self.y_train, self.y_valid = train_test_split(X, Y, test_size=0.1, random_state=42)
+        if validation:
+            self.x_train, self.x_valid, self.y_train, self.y_valid = train_test_split(X, Y, test_size=0.1, random_state=42)
+        else:
+            self.x_train, self.y_train = X, Y
+        
         self.X = self.x_train
         self.Y = self.y_train
 
@@ -107,16 +112,40 @@ class DecisionTree:
         raise Exception('너무 작은 target f1')
     
 
-    def get_all_depth(self, scoring='all'):
+    def get_all_depth(self, scoring='all', visualize=True):
         self.max_depth = self.make_dt().get_depth()
     
         score_list = []
+        val_score_list = []
+
 
         for depth in range(1, self.max_depth):
-            if depth % 10 == 0:
-                print(f'testing depth {depth}...', end='\r')
+            if self.validation:
+                self.X = self.x_train
+                if len(np.unique(self.Y)) == 2:
+                    self.Y = (self.y_train==self.tgt_n).astype(int)
+                else:
+                    self.Y = self.y_train
+
             model = self.make_dt(max_depth = depth)
+
             score = self.get_score(model, scoring)
             score_list.append(score)
+
+            if self.validation:
+                val_score = self.get_valid_score(model, scoring)
+                val_score_list.append(val_score)
+
+            if visualize:   
+                self.visualize_tree(model)
         
-        return score_list
+        if self.validation:
+            return score_list, val_score_list
+        else:
+            return score_list
+    
+
+    def visualize_tree(self, model):
+        plt.figure(figsize=(70, 50))
+        plot_tree(model, feature_names=self.feature_names, class_names=self.class_names, filled=True)
+        plt.show()
