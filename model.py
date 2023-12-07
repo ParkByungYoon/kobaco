@@ -1,4 +1,4 @@
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, AgglomerativeClustering
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import recall_score, precision_score, f1_score
@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 class DecisionTree:
 
-    def __init__(self, pivot_df, embedding, validation=False, k=15) -> None:
+    def __init__(self, pivot_df, embedding, validation=False, k=15, cluster='kmeans') -> None:
         self.df = pivot_df
         self.embedding = embedding
 
@@ -18,7 +18,10 @@ class DecisionTree:
         self.validation = validation
 
         X = np.array(pivot_df.iloc[:,:])
-        Y = np.array(self.kmeans(k))
+        if cluster=='kmeans':
+            Y = np.array(self.kmeans(k))
+        else :
+            Y = np.array(self.agglomerative_clustering(k))
 
         if validation:
             self.x_train, self.x_valid, self.y_train, self.y_valid = train_test_split(X, Y, test_size=0.1, random_state=42)
@@ -38,6 +41,11 @@ class DecisionTree:
         kmeans.fit(embedding)
         return kmeans.predict(embedding)
     
+    def agglomerative_clustering(self, k):
+        agg_cluster = AgglomerativeClustering(n_clusters=k, affinity='euclidean', linkage='ward')
+        embedding = self.embedding[self.df.index.values.tolist()].copy()
+        return agg_cluster.fit_predict(embedding)
+    
 
     def kmeans_target(self, tgt_n): 
         self.tgt_n = tgt_n
@@ -45,13 +53,14 @@ class DecisionTree:
         self.Y = (self.y_train==self.tgt_n).astype(int)
     
 
-    def make_dt(self, ccp_alpha=0.0, min_samples_split=2, max_depth=None, min_impurity_decrease=0,random_state = 42):
+    def make_dt(self, ccp_alpha=0.0, min_samples_split=2, max_depth=None, min_impurity_decrease=0, min_samples_leaf=1, random_state = 42):
         model = DecisionTreeClassifier(
             ccp_alpha = ccp_alpha, 
             max_depth = max_depth, 
             random_state=random_state, 
             min_samples_split=min_samples_split,
-            min_impurity_decrease=min_impurity_decrease
+            min_impurity_decrease=min_impurity_decrease,
+            min_samples_leaf=min_samples_leaf,
         )
         model = model.fit(self.X, self.Y)
         return model
@@ -158,7 +167,7 @@ class DecisionTree:
 
 
 
-    def get_all_split(self, scoring='f1_score'):
+    def get_all_split(self, scoring='f1_score', visualize=True):
         self.max_depth = 30
         
         passed_mss = []
@@ -173,6 +182,9 @@ class DecisionTree:
             passed_mss.append(mss)
             score_list.append(score)
             depth_list.append(depth)
+        
+            if visualize:   
+                self.visualize_tree(model)
 
         return passed_mss, score_list, depth_list
 
@@ -334,6 +346,41 @@ class DecisionTree:
 
                 self.max_depth_dt = self.make_dt(max_depth = self.max_depth, ccp_alpha=passed_ccp[-2])
                 return passed_ccp[-2], score_list[-2]
+                
+            i += 1
+        raise Exception('너무 작은 target f1')
+    
+
+
+    def get_proper_min_samples_leaf(self, target_score, scoring='f1_score'):
+        self.max_depth = self.make_dt().get_depth()
+        
+        passed_msl = []
+        score_list = []
+        i = 0
+
+        for msl in range(1, 30): #이분탐색 개선가능
+            model = self.make_dt(max_depth = self.max_depth, min_samples_leaf=msl)
+            score = self.get_score(model, scoring)
+            
+            passed_msl.append(msl)
+            score_list.append(score)
+
+            if (i == 0) and (score < target_score):
+                raise Exception('너무 높은 target f1 설정, 달성 불가능')
+
+            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
+                # 이전 max depth가 임계치를 넘는 최소 depth
+                self.max_score = score_list[-2]
+                
+                plt.plot(passed_msl,score_list)
+                plt.xlabel('min sample split')
+                plt.ylabel('fl-score')
+                plt.hlines(y=target_score, xmin = passed_msl[-1], xmax=passed_msl[0],colors='r')
+                plt.show()
+
+                self.max_depth_dt = self.make_dt(max_depth = self.max_depth, min_samples_leaf=passed_msl[-2])
+                return passed_msl[-2], score_list[-2]
                 
             i += 1
         raise Exception('너무 작은 target f1')
