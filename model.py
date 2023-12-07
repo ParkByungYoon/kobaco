@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 class DecisionTree:
 
-    def __init__(self, pivot_df, embedding, validation=False, k=15, hierarchical=True) -> None:
+    def __init__(self, pivot_df, embedding, validation=False, k=15, hierarchical=False) -> None:
         self.df = pivot_df
         self.embedding = embedding
 
@@ -19,9 +19,9 @@ class DecisionTree:
 
         X = np.array(pivot_df.iloc[:,:])
         if hierarchical:
-            Y = np.array(self.kmeans(k))
-        else :
             Y = np.array(self.agglomerative_clustering(k))
+        else :
+            Y = np.array(self.kmeans(k))
 
         if validation:
             self.x_train, self.x_valid, self.y_train, self.y_valid = train_test_split(X, Y, test_size=0.1, random_state=42)
