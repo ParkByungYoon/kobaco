@@ -4,7 +4,8 @@ import re
 class RuleExtractor:
     
     def __init__(self, model) -> None:
-        self.model = model.max_depth_dt
+        self.model = model.max_param_dt # 민철: max_depth_dt --> max_param_dt 수정
+        # self.model = model.max_depth_dt
         self.feature_names = model.feature_names
         self.class_names = model.class_names
         self.route = {}
