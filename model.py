@@ -13,14 +13,13 @@ class DecisionTree:
         self.embedding = embedding
 
         self.alpha = 0.0
-        self.max_depth = None
         self.k = k
         self.validation = validation
 
         X = np.array(pivot_df.iloc[:,:])
         if cluster=='kmeans':
             Y = np.array(self.kmeans(k))
-        else :
+        else:
             Y = np.array(self.agglomerative_clustering(k))
 
         if validation:
@@ -41,6 +40,7 @@ class DecisionTree:
         kmeans.fit(embedding)
         return kmeans.predict(embedding)
     
+
     def agglomerative_clustering(self, k):
         agg_cluster = AgglomerativeClustering(n_clusters=k, affinity='euclidean', linkage='ward')
         embedding = self.embedding[self.df.index.values.tolist()].copy()
@@ -52,8 +52,14 @@ class DecisionTree:
         self.X = self.x_train
         self.Y = (self.y_train==self.tgt_n).astype(int)
     
-    # 민철: **params 수정함
+
     def make_dt(self, random_state=42, **params):
+        if self.validation:
+            self.X = self.x_train
+            if len(np.unique(self.Y)) == 2:
+                self.Y = (self.y_train==self.tgt_n).astype(int)
+            else:
+                self.Y = self.y_train
         model = DecisionTreeClassifier(random_state=random_state, **params)
         model = model.fit(self.X, self.Y)
         return model
@@ -82,10 +88,9 @@ class DecisionTree:
         elif scoring == 'f1_score': return f1
         else:   return recall, precision, f1
 
-    # 민철 : get_proper_param 함수 만듬
-    def get_proper_param(self, target_score=0.6, scoring='f1_score',
-                         check_param='max_depth', scale_ls=[None],
-                         **params):
+
+    def get_proper_param(self, search_space, target_score=0.6, scoring='f1_score', check_param='max_depth', **params):
+
         self.max_param = self.make_dt(**params).get_params()[check_param]
         print(f'최대 score의 {check_param} = {self.max_param}')
         
@@ -94,7 +99,7 @@ class DecisionTree:
         model_params_list = []
         i = 0
         
-        for param in scale_ls:
+        for param in search_space:
             print(f'testing {check_param}: {param}...', end='\r')
             model = self.make_dt(**{check_param:param}, **params)
             score = self.get_score(model, scoring)
@@ -103,9 +108,6 @@ class DecisionTree:
             passed_param.append(param)
             score_list.append(score)
             model_params_list.append(now_params)
-
-            # if (i == 0) and (score < target_score):
-            #     raise Exception(f'너무 높은 {scoring} 설정, 달성 불가능')
 
             if (score < target_score) and (i > 0):
                 print(f'{check_param} {param}에서 target_socre {target_score}을 달성하지 못하여 종료합니다.')
@@ -122,63 +124,17 @@ class DecisionTree:
         plt.hlines(y=target_score, xmin=passed_param[-1], xmax=passed_param[0], colors='r')
         plt.show()
 
-        self.max_param_dt = self.make_dt(**{check_param:param}, **params)
+        self.dt = self.make_dt(**{check_param:param}, **params)
         # 해당 모델의 파라미터, 스코어 반환
         return model_params_list[-2], score_list[-2]  
-            
-    
-    def get_proper_depth(self, target_score, scoring='f1_score'):
-        self.max_depth = self.make_dt().get_depth()
-        
-        passed_depths = []
-        score_list = []
-        i = 0
-        
-        for depth in range(self.max_depth, 1, -1): #이분탐색 개선가능
-            if depth % 10 == 0:
-                print(f'testing depth {depth}...', end='\r')
-            model = self.make_dt(max_depth = depth)
-            score = self.get_score(model, scoring)
-            
-            passed_depths.append(depth)
-            score_list.append(score)
-
-            if (i == 0) and (score < target_score):
-                raise Exception('너무 높은 target f1 설정, 달성 불가능')
-
-            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
-                # 이전 max depth가 임계치를 넘는 최소 depth
-                self.max_depth = passed_depths[-2]
-                self.max_score = score_list[-2]
-                
-                plt.plot(passed_depths,score_list)
-                plt.xlabel('depth')
-                plt.ylabel('fl-score')
-                plt.hlines(y=target_score, xmin = passed_depths[-1], xmax=passed_depths[0],colors='r')
-                plt.show()
-
-                self.max_depth_dt = self.make_dt(max_depth = passed_depths[-2])
-                return passed_depths[-2], score_list[-2]
-                
-            i += 1
-        raise Exception('너무 작은 target f1')
     
 
     def get_all_depth(self, scoring='all', visualize=True):
-        self.max_depth = self.make_dt().get_depth()
-    
         score_list = []
         val_score_list = []
 
 
-        for depth in range(1, self.max_depth):
-            if self.validation:
-                self.X = self.x_train
-                if len(np.unique(self.Y)) == 2:
-                    self.Y = (self.y_train==self.tgt_n).astype(int)
-                else:
-                    self.Y = self.y_train
-
+        for depth in range(1, self.make_dt().get_depth()):
             model = self.make_dt(max_depth = depth)
 
             score = self.get_score(model, scoring)
@@ -201,223 +157,3 @@ class DecisionTree:
         plt.figure(figsize=(70, 50))
         plot_tree(model, feature_names=self.feature_names, class_names=self.class_names, filled=True)
         plt.show()
-
-
-
-    def get_all_split(self, scoring='f1_score', visualize=True):
-        self.max_depth = 30
-        
-        passed_mss = []
-        score_list = []
-        depth_list = []
-
-        for mss in range(2, 30): #이분탐색 개선가능
-            model = self.make_dt(max_depth = self.max_depth, min_samples_split=mss)
-            score = self.get_score(model, scoring)
-            depth = model.get_depth()
-            
-            passed_mss.append(mss)
-            score_list.append(score)
-            depth_list.append(depth)
-        
-            if visualize:   
-                self.visualize_tree(model)
-
-        return passed_mss, score_list, depth_list
-
-    def get_all_impurity(self, scoring='f1_score'):
-        self.max_depth = 30
-        
-        passed_mid = []
-        score_list = []
-        depth_list = []
-
-        for mid in range(10):
-            mid = mid/10000
-            model = self.make_dt(max_depth = self.max_depth, min_impurity_decrease=mid)
-            score = self.get_score(model, scoring)
-            depth = model.get_depth()
-            
-            passed_mid.append(mid)
-            score_list.append(score)
-            depth_list.append(depth)
-
-        return passed_mid, score_list, depth_list
-    
-
-
-
-    def get_proper_min_sample_split(self, target_score, scoring='f1_score'):
-        self.max_depth = self.make_dt().get_depth()
-        
-        passed_mss = []
-        score_list = []
-        i = 0
-
-        for mss in range(2, 30): #이분탐색 개선가능
-            model = self.make_dt(max_depth = self.max_depth, min_samples_split=mss)
-            score = self.get_score(model, scoring)
-            
-            passed_mss.append(mss)
-            score_list.append(score)
-
-            if (i == 0) and (score < target_score):
-                raise Exception('너무 높은 target f1 설정, 달성 불가능')
-
-            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
-                # 이전 max depth가 임계치를 넘는 최소 depth
-                # self.max_depth = passed_mss[-2]
-                self.max_score = score_list[-2]
-                
-                plt.plot(passed_mss,score_list)
-                plt.xlabel('min sample split')
-                plt.ylabel('fl-score')
-                plt.hlines(y=target_score, xmin = passed_mss[-1], xmax=passed_mss[0],colors='r')
-                plt.show()
-
-                self.max_depth_dt = self.make_dt(max_depth = self.max_depth, min_samples_split=passed_mss[-2])
-                return passed_mss[-2], score_list[-2]
-                
-            i += 1
-        raise Exception('너무 작은 target f1')
-
-
-    def get_proper_min_impurity_decrease(self, target_score, scoring='f1_score'):
-        self.max_depth = self.make_dt().get_depth()
-        
-        passed_mid = []
-        score_list = []
-        i = 0
-
-        for mid in range(10):
-            mid = mid/10000
-            model = self.make_dt(max_depth = self.max_depth, min_impurity_decrease=mid)
-            score = self.get_score(model, scoring)
-            
-            passed_mid.append(mid)
-            score_list.append(score)
-
-            if (i == 0) and (score < target_score):
-                raise Exception('너무 높은 target f1 설정, 달성 불가능')
-
-            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
-                # 이전 max depth가 임계치를 넘는 최소 depth
-                # self.max_depth = passed_mid[-2]
-                self.max_score = score_list[-2]
-                
-                plt.plot(passed_mid,score_list)
-                plt.xlabel('depth')
-                plt.ylabel('min impurity decrease')
-                plt.hlines(y=target_score, xmin = passed_mid[-1], xmax=passed_mid[0],colors='r')
-                plt.show()
-
-                self.max_depth_dt = self.make_dt(max_depth = self.max_depth, min_impurity_decrease=passed_mid[-2])
-                return passed_mid[-2], score_list[-2]
-                
-            i += 1
-        raise Exception('너무 작은 target f1')
-    
-
-    def get_proper_min_sample_split(self, target_score, scoring='f1_score'):
-        self.max_depth = self.make_dt().get_depth()
-        
-        passed_mss = []
-        score_list = []
-        i = 0
-
-        for mss in range(2, 30): #이분탐색 개선가능
-            model = self.make_dt(max_depth = self.max_depth, min_samples_split=mss)
-            score = self.get_score(model, scoring)
-            
-            passed_mss.append(mss)
-            score_list.append(score)
-
-            if (i == 0) and (score < target_score):
-                raise Exception('너무 높은 target f1 설정, 달성 불가능')
-
-            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
-                # 이전 max depth가 임계치를 넘는 최소 depth
-                # self.max_depth = passed_mss[-2]
-                self.max_score = score_list[-2]
-                
-                plt.plot(passed_mss,score_list)
-                plt.xlabel('min sample split')
-                plt.ylabel('fl-score')
-                plt.hlines(y=target_score, xmin = passed_mss[-1], xmax=passed_mss[0],colors='r')
-                plt.show()
-
-                self.max_depth_dt = self.make_dt(max_depth = self.max_depth, min_samples_split=passed_mss[-2])
-                return passed_mss[-2], score_list[-2]
-                
-            i += 1
-        raise Exception('너무 작은 target f1')
-
-
-    def get_proper_cost_complexity_pruning(self, target_score, scoring='f1_score'):
-        self.max_depth = self.make_dt().get_depth()
-        
-        passed_ccp = []
-        score_list = []
-        i = 0
-
-        for ccp in range(0, 10): #이분탐색 개선가능
-            ccp = ccp/10000
-            model = self.make_dt(max_depth = self.max_depth, ccp_alpha=ccp)
-            score = self.get_score(model, scoring)
-            
-            passed_ccp.append(ccp)
-            score_list.append(score)
-
-            if (i == 0) and (score < target_score):
-                raise Exception('너무 높은 target f1 설정, 달성 불가능')
-
-            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
-                # 이전 max depth가 임계치를 넘는 최소 depth
-                self.max_score = score_list[-2]
-                
-                plt.plot(passed_ccp,score_list)
-                plt.xlabel('min sample split')
-                plt.ylabel('fl-score')
-                plt.hlines(y=target_score, xmin = passed_ccp[-1], xmax=passed_ccp[0],colors='r')
-                plt.show()
-
-                self.max_depth_dt = self.make_dt(max_depth = self.max_depth, ccp_alpha=passed_ccp[-2])
-                return passed_ccp[-2], score_list[-2]
-                
-            i += 1
-        raise Exception('너무 작은 target f1')
-    
-
-
-    def get_proper_min_samples_leaf(self, target_score, scoring='f1_score'):
-        self.max_depth = self.make_dt().get_depth()
-        
-        passed_msl = []
-        score_list = []
-        i = 0
-
-        for msl in range(1, 30): #이분탐색 개선가능
-            model = self.make_dt(max_depth = self.max_depth, min_samples_leaf=msl)
-            score = self.get_score(model, scoring)
-            
-            passed_msl.append(msl)
-            score_list.append(score)
-
-            if (i == 0) and (score < target_score):
-                raise Exception('너무 높은 target f1 설정, 달성 불가능')
-
-            if (score < target_score) and (i > 0): #목표 f1값 아래로 떨어지면
-                # 이전 max depth가 임계치를 넘는 최소 depth
-                self.max_score = score_list[-2]
-                
-                plt.plot(passed_msl,score_list)
-                plt.xlabel('min sample split')
-                plt.ylabel('fl-score')
-                plt.hlines(y=target_score, xmin = passed_msl[-1], xmax=passed_msl[0],colors='r')
-                plt.show()
-
-                self.max_depth_dt = self.make_dt(max_depth = self.max_depth, min_samples_leaf=passed_msl[-2])
-                return passed_msl[-2], score_list[-2]
-                
-            i += 1
-        raise Exception('너무 작은 target f1')
