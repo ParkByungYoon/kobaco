@@ -8,7 +8,7 @@ from collections import defaultdict
 class RuleExtractor:
     
     def __init__(self, model) -> None:
-        self.model = model.max_param_dt # 민철: max_depth_dt --> max_param_dt 수정
+        self.model = model.dt # 민철: max_depth_dt --> max_param_dt 수정
         # self.model = model.max_depth_dt
         self.feature_names = model.feature_names
         self.class_names = model.class_names
@@ -116,7 +116,7 @@ class RuleExtractor:
 class RuleStatisticsCalculator:
     
     def __init__(self, model, pivot_df):
-        self.model = model.max_param_dt
+        self.model = model.dt
         self.pivot_df = pivot_df
         self.k = self.model.n_classes_
 
@@ -166,7 +166,7 @@ class RuleStatisticsCalculator:
             genre_mean = visual_df[genre].mean()
             genre_std = visual_df[genre].std()
 
-            visual_cond = visual_df[genre] >= genre_mean + genre_std, genre
+            visual_cond = visual_df[genre] >= genre_mean + genre_std
             visual_df.loc[visual_cond, genre] = genre_mean + genre_std
             
             min_rule = sorted(rule_list)[0]

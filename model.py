@@ -1,7 +1,7 @@
 from sklearn.cluster import KMeans, AgglomerativeClustering
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import recall_score, precision_score, f1_score
+from sklearn.metrics import recall_score, precision_score, f1_score, accuracy_score
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 
@@ -82,11 +82,13 @@ class DecisionTree:
         recall = recall_score(self.Y, prediction, average=average)
         precision = precision_score(self.Y, prediction, average=average)
         f1 = f1_score(self.Y, prediction, average=average)
+        accuracy = accuracy_score(self.Y, prediction)
 
         if scoring == 'recall': return recall
         elif scoring == 'precision': return precision
         elif scoring == 'f1_score': return f1
-        else:   return recall, precision, f1
+        elif scoring == 'accuracy': return accuracy
+        else:   return recall, precision, f1, accuracy
 
 
     def get_proper_param(self, search_space, target_score=0.6, scoring='f1_score', check_param='max_depth', **params):
@@ -117,14 +119,14 @@ class DecisionTree:
         self.max_param = passed_param[-2]
         self.max_score = score_list[-2]
         
-        plt.plot(passed_param,score_list)
-        plt.xlabel(check_param)
-        plt.ylabel(scoring)
-        # max_score 수평선 그리기
-        plt.hlines(y=target_score, xmin=passed_param[-1], xmax=passed_param[0], colors='r')
-        plt.show()
+        # plt.plot(passed_param,score_list)
+        # plt.xlabel(check_param)
+        # plt.ylabel(scoring)
+        # # max_score 수평선 그리기
+        # plt.hlines(y=target_score, xmin=passed_param[-1], xmax=passed_param[0], colors='r')
+        # plt.show()
 
-        self.dt = self.make_dt(**{check_param:param}, **params)
+        self.dt = self.make_dt(**{check_param:passed_param[-2]}, **params)
         # 해당 모델의 파라미터, 스코어 반환
         return model_params_list[-2], score_list[-2]  
     
@@ -155,5 +157,6 @@ class DecisionTree:
 
     def visualize_tree(self, model):
         plt.figure(figsize=(70, 50))
-        plot_tree(model, feature_names=self.feature_names, class_names=self.class_names, filled=True)
+        class_names = [str(i) for i in np.unique(self.Y)]
+        plot_tree(model, feature_names=self.feature_names, class_names=class_names, filled=True)
         plt.show()
